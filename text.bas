@@ -1,4 +1,4 @@
-Sub FilterAndCopyData()
+Sub Generate_Excel()
     Dim wsI As Worksheet, wsS As Worksheet, wsT As Worksheet
     Dim lastIRow As Long, lastSRow As Long, lastTRow As Long
     Dim i As Long, j As Long, k As Long, row As Long
@@ -43,9 +43,13 @@ Sub FilterAndCopyData()
                     wsT.Cells(row, "F").Value = wsS.Cells(j, "AK").Value
                     wsT.Cells(row, "G").Value = CStr(wsS.Cells(j, "AL").Text)
                     wsT.Cells(row, "H").Value = wsS.Cells(j, "AM").Value
-                    If matchCom And matchSvc Then matchType = "Servicing & Commission"
-                    ElseIf matchCom Then matchType = "Commission Only"
-                    Else matchType = "Servicing Only"
+                    If matchCom And matchSvc Then
+                        matchType = "Servicing & Commission"
+                    ElseIf matchCom Then
+                        matchType = "Commission Only"
+                    Else
+                        matchType = "Servicing Only"
+                    End If
                     wsT.Cells(row, "I").Value = matchType
                     row = row + 1
                 End If
@@ -56,8 +60,15 @@ NextInput:
     
     ' Find agent info
     lastTRow = wsT.Cells(wsT.Rows.Count, "A").End(xlUp).Row
+    If lastTRow < 2 Then
+        MsgBox "No data found to process."
+        Exit Sub
+    End If
+    
+    code = Trim(CStr(wsI.Cells(2, "A").Value))
     comCode = Trim(CStr(wsT.Cells(2, "E").Text))
     svcCode = Trim(CStr(wsT.Cells(2, "G").Text))
+    
     If Len(comCode) >= 6 And Right(comCode, 6) = code Then
         agentCode = comCode
         agentName = Trim(CStr(wsT.Cells(2, "F").Value))
@@ -65,6 +76,12 @@ NextInput:
         agentCode = svcCode
         agentName = Trim(CStr(wsT.Cells(2, "H").Value))
     End If
+    
+    If Len(agentCode) < 6 Then
+        MsgBox "Could not find agent code."
+        Exit Sub
+    End If
+    
     unitCode = Left(agentCode, 6)
     If agentName = "" Then agentName = "Agent"
     
@@ -73,9 +90,9 @@ NextInput:
         comCode = Trim(CStr(wsT.Cells(k, "E").Text))
         svcCode = Trim(CStr(wsT.Cells(k, "G").Text))
         If Len(comCode) >= 6 And Len(svcCode) >= 6 And Left(comCode, 6) <> Left(svcCode, 6) Then
+            matchType = Trim(CStr(wsT.Cells(k, "I").Value))
             com6 = Right(comCode, 6)
             svc6 = Right(svcCode, 6)
-            matchType = Trim(CStr(wsT.Cells(k, "I").Value))
             If matchType = "Commission Only" Then
                 wsT.Cells(k, "G").Value = "WITH ANOTHER REP/FIRM"
                 wsT.Cells(k, "H").Value = "WITH ANOTHER REP/FIRM"
