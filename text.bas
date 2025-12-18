@@ -1,4 +1,4 @@
-Sub FilterAndCopyData()
+Sub Generate_Excel()
     Dim wsI As Worksheet, wsS As Worksheet, wsT As Worksheet
     Dim lastIRow As Long, lastSRow As Long, lastTRow As Long
     Dim i As Long, j As Long, k As Long, row As Long
@@ -9,16 +9,10 @@ Sub FilterAndCopyData()
     Dim wb As Workbook, yearFolder As String, dateFolder As String
     Dim matchCom As Boolean, matchSvc As Boolean
     Dim filesCreated As Long, skippedCodes As String
-    Dim labelId As String, labelName As String
+    Dim labelName As String
     
-    ' CONFIGURE YOUR SENSITIVITY LABEL HERE
-    ' Option 1: If you know the exact label name your org uses
-    labelName = "Confidential" ' Change to your org's label (e.g., "Internal", "Public", "Highly Confidential")
-    labelId = "" ' Leave empty if you only know the name
-    
-    ' Option 2: If your IT admin provided a label GUID/ID
-    ' labelId = "your-label-guid-here"
-    ' labelName = "Your Label Name"
+    ' CONFIGURE YOUR SENSITIVITY LABEL NAME HERE (leave empty if not needed)
+    labelName = "Confidential" ' Change to your org's label name, or set to "" to skip
     
     Set wsI = ThisWorkbook.Worksheets("INPUT")
     Set wsS = ThisWorkbook.Worksheets("ROP_REPORT_DATA")
@@ -141,7 +135,7 @@ Sub FilterAndCopyData()
             End If
         Next k
         
-        ' Create folders and save file
+        ' Create folders
         yearFolder = ThisWorkbook.Path & "\" & Year(Now())
         dateFolder = yearFolder & "\" & Format(Now(), "DD-MMM")
         On Error Resume Next
@@ -152,32 +146,47 @@ Sub FilterAndCopyData()
         fileName = Replace(Replace(Replace(Replace(Replace(Replace(Replace(Replace(Replace(agentName, "/", "-"), "\", "-"), ":", "-"), "*", "-"), "?", "-"), """", "-"), "<", "-"), ">", "-"), "|", "-")
         fileName = fileName & "_" & inputCode & ".xlsx"
         filePath = dateFolder & "\" & fileName
+        
+        ' Delete existing file if it exists (for overwrite)
         On Error Resume Next
-        Kill filePath
+        If Dir(filePath) <> "" Then
+            SetAttr filePath, vbNormal ' Remove read-only attribute if any
+            Kill filePath
+        End If
         On Error GoTo 0
         
+        ' Create workbook and copy template
         Set wb = Workbooks.Add
         wsT.Copy Before:=wb.Sheets(1)
         Application.DisplayAlerts = False
         wb.Sheets(2).Delete
+        Application.DisplayAlerts = True
         
-        ' Save file with password
-        wb.SaveAs Filename:=filePath, FileFormat:=xlOpenXMLWorkbook, Password:=unitCode
+        ' Save file with password (overwrite if exists)
+        Application.DisplayAlerts = False
+        wb.SaveAs Filename:=filePath, FileFormat:=xlOpenXMLWorkbook, Password:=unitCode, WriteResPassword:="", ReadOnlyRecommended:=False
         
-        ' Apply sensitivity label after saving
-        On Error Resume Next
-        If labelId <> "" And labelName <> "" Then
-            wb.SetSensitivityLabel LabelId:=labelId, LabelName:=labelName
-        ElseIf labelName <> "" Then
+        ' Try to apply sensitivity label if configured
+        If labelName <> "" Then
+            On Error Resume Next
+            ' Try SetSensitivityLabel method (Office 365/Microsoft 365)
             wb.SetSensitivityLabel LabelName:=labelName
+            ' If that fails, try alternative method or skip
+            If Err.Number <> 0 Then
+                Err.Clear
+                ' Alternative: Try accessing SensitivityLabel property directly
+                ' wb.SensitivityLabel.LabelName = labelName
+            End If
+            On Error GoTo 0
         End If
-        If Err.Number <> 0 Then
-            Debug.Print "Warning: Could not set sensitivity label. Error: " & Err.Description
-        End If
+        
+        ' Save again to ensure label is saved (if it was applied)
+        On Error Resume Next
+        wb.Save
         On Error GoTo 0
         
-        wb.Close SaveChanges:=True
         Application.DisplayAlerts = True
+        wb.Close SaveChanges:=False
         filesCreated = filesCreated + 1
 NextCode:
     Next i
