@@ -1,0 +1,34 @@
+let
+    // 1. Pull the "Virtual Date" from your Excel Table
+    Source = Excel.CurrentWorkbook(){[Name="tbl_Settings"]}[Content],
+    SystemDate = Table.TransformColumnTypes(Source,{{"System Date", type date}}){0}[System Date],
+    
+    // 2. Define Start and End (Covers 2024 to end of 2026)
+    StartDate = #date(2024, 1, 1),
+    EndDate = #date(2026, 12, 31),
+    
+    // 3. Generate Date List
+    ListDates = List.Dates(StartDate, Duration.Days(EndDate - StartDate) + 1, #duration(1, 0, 0, 0)),
+    #"Converted to Table" = Table.FromList(ListDates, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    #"Renamed Columns" = Table.RenameColumns(#"Converted to Table",{{"Column1", "Date"}}),
+    #"Changed Type" = Table.TransformColumnTypes(#"Renamed Columns",{{"Date", type date}}),
+    
+    // 4. Add Calendar Columns
+    #"Add Year" = Table.AddColumn(#"Changed Type", "Year", each Date.Year([Date]), Int64.Type),
+    #"Add Month No" = Table.AddColumn(#"Add Year", "Month No", each Date.Month([Date]), Int64.Type),
+    #"Add Month Name" = Table.AddColumn(#"Add Month No", "Month Name", each Date.MonthName([Date]), type text),
+    
+    // 5. Create the Key for your 2026 Targets (e.g., "Jan-2026")
+    #"Add MonthYearKey" = Table.AddColumn(#"Add Month Name", "Month_Year_Key", each Date.ToText([Date], "MMM-yyyy"), type text),
+    
+    // 6. The "Automatic Filter" Engine (Month Offset)
+    // This calculates distance from your SystemDate. 
+    // If SystemDate is Feb 2026, then Jan 2026 is -1.
+    #"Add Month Offset" = Table.AddColumn(#"Add MonthYearKey", "Month Offset", each 
+        ((Date.Year([Date]) - Date.Year(SystemDate)) * 12) + (Date.Month([Date]) - Date.Month(SystemDate)), Int64.Type),
+    
+    // 7. Add Is_YTD Flag (For your 2026 Year-to-Date requirement)
+    #"Add IsYTD" = Table.AddColumn(#"Add Month Offset", "Is_YTD", each 
+        if Date.Year([Date]) = Date.Year(SystemDate) and [Date] < SystemDate then "YTD" else "Future", type text)
+in
+    #"Add IsYTD"
