@@ -3,9 +3,9 @@ let
     Source = Excel.CurrentWorkbook(){[Name="tbl_Settings"]}[Content],
     SystemDate = Table.TransformColumnTypes(Source,{{"System Date", type date}}){0}[System Date],
     
-    // 2. Define FIXED 2026 Range
-    StartDate = #date(2026, 1, 1),
-    EndDate = #date(2026, 12, 31),
+    // 2. Define Dynamic Range: Jan 1st Previous Year to Dec 31st Current Year
+    StartDate = #date(Date.Year(SystemDate) - 1, 1, 1),
+    EndDate = #date(Date.Year(SystemDate), 12, 31),
     
     // 3. Generate Date List
     ListDates = List.Dates(StartDate, Duration.Days(EndDate - StartDate) + 1, #duration(1, 0, 0, 0)),
@@ -13,19 +13,22 @@ let
     #"Renamed Columns" = Table.RenameColumns(#"Converted to Table",{{"Column1", "Date"}}),
     #"Changed Type" = Table.TransformColumnTypes(#"Renamed Columns",{{"Date", type date}}),
     
-    // 4. Essential Columns only
+    // 4. Essential Columns
     #"Add Month No" = Table.AddColumn(#"Changed Type", "Month No", each Date.Month([Date]), Int64.Type),
-    #"Add Month Name" = Table.AddColumn(#"Add Month No", "Month Name", each Date.MonthName([Date]), type text),
+    #"Add Month Name" = Table.AddColumn(#"Add Month No", "Month Name", each Date.ToText([Date], "MMM"), type text),
+    #"Add Year" = Table.AddColumn(#"Add Month Name", "Year", each Date.Year([Date]), Int64.Type),
     
-    // 5. Target Key (Must be MMM-yyyy to match your logic, e.g., Jan-2026)
-    #"Add MonthYearKey" = Table.AddColumn(#"Add Month Name", "Month_Year_Key", each Date.ToText([Date], "MMM-yyyy"), type text),
+    // 5. Target Key
+    #"Add MonthYearKey" = Table.AddColumn(#"Add Year", "Month_Year_Key", each Date.ToText([Date], "MMM-yyyy"), type text),
     
-    // 6. Month Offset (Calculates distance from your System Date)
+    // 6. Month Offset
     #"Add Month Offset" = Table.AddColumn(#"Add MonthYearKey", "Month Offset", each 
         ((Date.Year([Date]) - Date.Year(SystemDate)) * 12) + (Date.Month([Date]) - Date.Month(SystemDate)), Int64.Type),
     
-    // 7. AUTO-FILTER: Only show months that are COMPLETED (Offset -1, -2, etc.)
-    // If System Date is Feb 1, this will hide Feb through Dec automatically.
-    #"Filtered Past Only" = Table.SelectRows(#"Add Month Offset", each [Month Offset] < 0)
+    // 7. NEW: Period Type Flag (Instead of Filtering Rows)
+    #"Add Period Type" = Table.AddColumn(#"Add Month Offset", "Period Type", each 
+        if [Month Offset] < 0 then "Completed Month" 
+        else if [Month Offset] = 0 then "Current Month" 
+        else "Future Month", type text)
 in
-    #"Filtered Past Only"
+    #"Add Period Type"
